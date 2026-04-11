@@ -102,3 +102,10 @@ Static headers support `${ENV_VAR}` substitution at load time.
 ### OpenTelemetry
 
 Optional distributed tracing via OTLP gRPC. Configured under `server.telemetry` in `config.yaml`. All four MCP tool handlers and outbound HTTP calls are instrumented with spans.
+
+## Active Technologies
+- Go 1.23 (module `github.com/philippslang/portier`) + `github.com/mark3labs/mcp-go`, `github.com/getkin/kin-openapi/openapi3`, `go.opentelemetry.io/otel` (001-service-level-confirmation)
+- N/A — in-memory registry only (001-service-level-confirmation)
+
+## Recent Changes
+- 001-service-level-confirmation: Added Go 1.23 (module `github.com/philippslang/portier`) + `github.com/mark3labs/mcp-go`, `github.com/getkin/kin-openapi/openapi3`, `go.opentelemetry.io/otel`

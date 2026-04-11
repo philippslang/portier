@@ -38,6 +38,11 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	reg := NewRegistry(httpClient)
 	for _, svcCfg := range cfg.Services {
+		// Inherit server-level require_confirmation when not set per service.
+		if svcCfg.RequireConfirmation == nil {
+			v := cfg.Server.RequireConfirmation
+			svcCfg.RequireConfirmation = &v
+		}
 		if err := reg.LoadSpec(svcCfg); err != nil {
 			if otelShutdown != nil {
 				_ = otelShutdown(context.Background())

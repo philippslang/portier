@@ -1,0 +1,8 @@
+.specify/
+.claude/
+
+# Go build artifacts
+*.exe
+*.test
+*.out
+portier

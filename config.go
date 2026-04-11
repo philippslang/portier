@@ -26,6 +26,13 @@ type ServerConfig struct {
 	// Transport: "http" (default) or "stdio"
 	Transport string `yaml:"transport"`
 
+	// RequireConfirmation controls the write gate for mutating operations.
+	// When true (default), POST/PUT/PATCH/DELETE require the agent to pass
+	// confirmed=true; otherwise a confirmation prompt is returned instead.
+	// When false, mutating operations execute immediately and the confirmed
+	// parameter is omitted from the call_operation tool interface entirely.
+	RequireConfirmation bool `yaml:"require_confirmation"`
+
 	// OpenTelemetry configuration
 	Telemetry TelemetryConfig `yaml:"telemetry"`
 }
@@ -70,6 +77,12 @@ type ServiceConfig struct {
 	// These are never exposed to the LLM — they're server-side only.
 	// Use for auth tokens, API keys, tenant IDs, etc.
 	Headers map[string]string `yaml:"headers,omitempty"`
+
+	// RequireConfirmation controls the write gate for this service's mutating operations.
+	// When nil (field absent in config), the server-level require_confirmation setting is used.
+	// When true, POST/PUT/PATCH/DELETE require confirmed=true or a confirmation prompt is returned.
+	// When false, mutating operations execute immediately without a confirmation step.
+	RequireConfirmation *bool `yaml:"require_confirmation,omitempty"`
 }
 
 // LoadConfig reads and parses the YAML config file.
@@ -81,9 +94,10 @@ func LoadConfig(path string) (*Config, error) {
 
 	cfg := &Config{
 		Server: ServerConfig{
-			Addr:      ":8080",
-			Name:      "mcp-api-gateway",
-			Transport: "http",
+			Addr:                ":8080",
+			Name:                "mcp-api-gateway",
+			Transport:           "http",
+			RequireConfirmation: true,
 			Telemetry: TelemetryConfig{
 				Endpoint:    "localhost:4317",
 				SampleRatio: 1.0,

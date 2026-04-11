@@ -14,6 +14,12 @@ import (
 // RegisterTools wires the 4 progressive discovery tools to an MCP server.
 // Called automatically by NewServer; exposed so callers can embed portier tools
 // in an existing MCP server alongside their own tools.
+//
+// The write gate (confirmed parameter) is controlled per-service via each
+// ServiceConfig.RequireConfirmation field. Services with RequireConfirmation=true
+// require the agent to pass confirmed=true for mutating operations; services with
+// RequireConfirmation=false execute mutations immediately. The confirmed parameter
+// is always present in the call_operation tool schema.
 func RegisterTools(s *mcpserver.MCPServer, reg *Registry) {
 	// Tool 1: list_services — no parameters
 	listServicesTool := mcp.NewTool("list_services",
@@ -68,9 +74,9 @@ func RegisterTools(s *mcpserver.MCPServer, reg *Registry) {
 		return toJSONResult(result)
 	}))
 
-	// Tool 4: call_operation — executes the API call with write gate
-	callTool := mcp.NewTool("call_operation",
-		mcp.WithDescription("Execute an API operation. Pass all path, query, and body parameters as a flat object in 'params'. Mutating operations (POST/PUT/PATCH/DELETE) require confirmed=true or will return a confirmation prompt."),
+	// Tool 4: call_operation — executes the API call; write gate is per-service
+	callToolOpts := []mcp.ToolOption{
+		mcp.WithDescription("Execute an API operation. Pass all path, query, and body parameters as a flat object in 'params'. Mutating operations (POST/PUT/PATCH/DELETE) on services that require confirmation will return a confirmation prompt unless confirmed=true."),
 		mcp.WithString("service",
 			mcp.Required(),
 			mcp.Description("Service name"),
@@ -83,13 +89,15 @@ func RegisterTools(s *mcpserver.MCPServer, reg *Registry) {
 			mcp.Description("Path, query, and body parameters merged into a flat object"),
 		),
 		mcp.WithBoolean("confirmed",
-			mcp.Description("Set to true to confirm a mutating (POST/PUT/PATCH/DELETE) operation"),
+			mcp.Description("Set to true to confirm a mutating (POST/PUT/PATCH/DELETE) operation on services that require confirmation"),
 		),
-	)
+	}
+	callTool := mcp.NewTool("call_operation", callToolOpts...)
 	s.AddTool(callTool, withTracing("call_operation", func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args := request.GetArguments()
 		service, _ := args["service"].(string)
 		opID, _ := args["operationId"].(string)
+
 		confirmed, _ := args["confirmed"].(bool)
 
 		params := map[string]any{}

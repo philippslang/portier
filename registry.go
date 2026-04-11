@@ -27,12 +27,13 @@ type Operation struct {
 
 // Service is a registered API service with its parsed operations.
 type Service struct {
-	Name          string                `json:"name"`
-	Description   string                `json:"description"`
-	BaseURL       string                `json:"-"`
-	Operations    map[string]*Operation // keyed by operationId
-	Tags          []string              `json:"tags"`
-	StaticHeaders map[string]string     // injected into every request, never shown to LLM
+	Name                string                `json:"name"`
+	Description         string                `json:"description"`
+	BaseURL             string                `json:"-"`
+	Operations          map[string]*Operation // keyed by operationId
+	Tags                []string              `json:"tags"`
+	StaticHeaders       map[string]string     // injected into every request, never shown to LLM
+	RequireConfirmation bool                  // resolved effective value; true = write gate active for this service
 }
 
 // Registry holds all parsed OpenAPI specs in memory. Thread-safe.
@@ -68,12 +69,18 @@ func (r *Registry) LoadSpec(cfg ServiceConfig) error {
 	// Resolve base URL: config overrides > spec servers block
 	baseURL := resolveBaseURL(doc, cfg)
 
+	requireConfirmation := true
+	if cfg.RequireConfirmation != nil {
+		requireConfirmation = *cfg.RequireConfirmation
+	}
+
 	svc := &Service{
-		Name:          cfg.Name,
-		Description:   doc.Info.Description,
-		BaseURL:       baseURL,
-		Operations:    make(map[string]*Operation),
-		StaticHeaders: cfg.Headers,
+		Name:                cfg.Name,
+		Description:         doc.Info.Description,
+		BaseURL:             baseURL,
+		Operations:          make(map[string]*Operation),
+		StaticHeaders:       cfg.Headers,
+		RequireConfirmation: requireConfirmation,
 	}
 
 	// Build allow set for O(1) lookup. Empty means allow all.
@@ -337,7 +344,7 @@ func (r *Registry) CallOperation(
 	r.mu.RUnlock()
 
 	// ── WRITE GATE ──────────────────────────────────────────────────────────
-	if isMutating(op.Method) && !confirmed {
+	if svc.RequireConfirmation && isMutating(op.Method) && !confirmed {
 		return map[string]any{
 			"status":  "confirmation_required",
 			"message": fmt.Sprintf("This will %s %s. Confirm?", op.Method, op.Path),
