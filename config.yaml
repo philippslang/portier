@@ -16,4 +16,4 @@ services:
   # Minimal — just a name and spec path.
   # Host and base path are read from the spec's servers block.
   - name: pets
-    spec: ./specs/pets.yaml
+    spec: ./apis/pets.yaml
