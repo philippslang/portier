@@ -1,0 +1,46 @@
+# MCP API Gateway configuration
+#
+# Each service maps to one OpenAPI spec (one microservice).
+# The LLM discovers services → operations → schemas progressively.
+
+server:
+  addr: ":8080"
+  name: "my-mcp-gateway"
+  transport: "http"  # "http" (streamable HTTP, default) or "stdio"
+  telemetry:
+    enabled: true
+    endpoint: "localhost:4317"  # OTLP gRPC collector
+    sample_ratio: 1.0           # 0.0-1.0, 1.0 = trace everything
+
+services:
+  # Minimal — just a name and spec path.
+  # Host and base path are read from the spec's servers block.
+  - name: pets
+    spec: ./specs/pets.yaml
+
+  # Override the target host (e.g. point to staging instead of prod).
+  - name: bookstore
+    spec: ./specs/bookstore.yaml
+    host: https://staging.api.internal
+
+  # Override both host and base path, with static auth headers.
+  - name: bookstore
+    spec: ./specs/bookstore.yaml
+    host: https://api.internal
+    base_path: /bookstore/v2
+    headers:
+      Authorization: "Bearer ${API_TOKEN}"
+      X-Tenant-Id: "bookstore-prod"
+    ignore_headers:
+      - X-Refferal-Id
+      - Authorization       # managed via static headers above
+
+  # Allow list — only expose specific operations.
+  # All other operations in the spec are hidden from the LLM.
+  - name: pets
+    spec: ./specs/pets.yaml
+    host: https://api.internal
+    base_path: /pets/v1
+    allow_operations:
+      - listPets
+      - getOwnerById
