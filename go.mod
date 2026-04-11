@@ -1,4 +1,4 @@
-module portier
+module github.com/philippslang/portier
 
 go 1.25.5
 

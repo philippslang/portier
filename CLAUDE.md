@@ -4,14 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Portier is a Go MCP (Model Context Protocol) API gateway. It reads OpenAPI specs at startup and exposes them as four MCP tools so LLM agents can progressively discover and call REST APIs. The entire implementation lives in a single file: `mcp_server.go`.
+Portier is a Go MCP (Model Context Protocol) API gateway. It reads OpenAPI specs at startup and exposes them as four MCP tools so LLM agents can progressively discover and call REST APIs.
+
+The module path is `github.com/philippslang/portier`.
 
 ## Layout
 
 ```
-mcp_server.go        # package portier — all library code
-cmd/portier/main.go  # package main   — CLI entrypoint
-go.mod / go.sum      # module: portier
+doc.go               # package portier — package-level doc comment
+config.go            # Config types and LoadConfig
+registry.go          # Registry, LoadSpec, and the 4 tool handler methods
+schema.go            # flattenSchema* — OpenAPI → LLM-readable maps
+telemetry.go         # OTel tracer init and withTracing middleware
+tools.go             # RegisterTools — wires the 4 tools to the MCP server
+server.go            # Server, NewServer, NewServerFromFile, Run
+util.go              # isMutating, containsTag, filterIgnoredHeaders, truncateResponse
+cmd/portier/main.go  # package main — CLI entrypoint
+specs/               # Example OpenAPI specs
+go.mod / go.sum      # module: github.com/philippslang/portier
 ```
 
 ## Build & Run
@@ -32,7 +42,7 @@ There are no tests and no linter configuration currently.
 ## Library usage
 
 ```go
-import "portier"
+import "github.com/philippslang/portier"
 
 // From a config file
 srv, err := portier.NewServerFromFile("config.yaml")

@@ -120,7 +120,7 @@ go build -o portier ./cmd/portier
 ### As a Go library
 
 ```go
-import "portier"
+import "github.com/philippslang/portier"
 
 // From a config file
 srv, err := portier.NewServerFromFile("config.yaml")

@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"portier"
+	"github.com/philippslang/portier"
 )
 
 func main() {
