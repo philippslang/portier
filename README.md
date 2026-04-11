@@ -67,7 +67,7 @@ server:
   addr: ":8080"
   name: "my-mcp-gateway"
   transport: "http"          # "http" (streamable HTTP) or "stdio"
-  require_confirmation: false # set to true/omit to to require gate, can be overriden on services level
+  require_confirmation: false # set to true/omit to to require gate for mutating operations, can be overriden on services level
   telemetry:
     enabled: true
     endpoint: "localhost:4317"   # OTLP gRPC collector

@@ -7,7 +7,7 @@ server:
   addr: ":8080"
   name: "my-mcp-gateway"
   transport: "http"  # "http" (streamable HTTP, default) or "stdio"
-  require_confirmation: true  # gateway-wide default; inherited by services that omit the field
+  require_confirmation: true  # gateway-wide default for mutating operations; inherited by services that can override the field
 
 services:
   # Minimal — just a name and spec path.

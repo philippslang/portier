@@ -231,10 +231,10 @@ func (r *Registry) ListOperations(serviceName, tag string) ([]map[string]any, er
 			continue
 		}
 		result = append(result, map[string]any{
-			"operationId": op.OperationID,
-			"summary":     op.Summary,
-			"method":      op.Method,
-			"tags":        op.Tags,
+			"operationId":          op.OperationID,
+			"summary":              op.Summary,
+			"confirmationRequired": svc.RequireConfirmation && isMutating(op.Method),
+			"tags":                 op.Tags,
 		})
 	}
 	return result, nil
@@ -256,10 +256,10 @@ func (r *Registry) GetOperationDetail(serviceName, operationID string) (map[stri
 	}
 
 	detail := map[string]any{
-		"operationId": op.OperationID,
-		"method":      op.Method,
-		"path":        op.Path,
-		"summary":     op.Summary,
+		"operationId":          op.OperationID,
+		"confirmationRequired": svc.RequireConfirmation && isMutating(op.Method),
+		"path":                 op.Path,
+		"summary":              op.Summary,
 	}
 
 	// Flatten parameters into a simple schema the LLM can read

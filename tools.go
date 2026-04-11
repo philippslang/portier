@@ -31,7 +31,7 @@ func RegisterTools(s *mcpserver.MCPServer, reg *Registry) {
 
 	// Tool 2: list_operations — service (required), tag (optional)
 	listOpsTool := mcp.NewTool("list_operations",
-		mcp.WithDescription("List operations available in a service. Returns operationId, summary, HTTP method, and tags. Optionally filter by tag."),
+		mcp.WithDescription("List operations available in a service. Returns operationId, summary, confirmationRequired flag (true when the operation requires confirmed=true to execute), and tags. Optionally filter by tag."),
 		mcp.WithString("service",
 			mcp.Required(),
 			mcp.Description("Service name from list_services"),
@@ -53,7 +53,7 @@ func RegisterTools(s *mcpserver.MCPServer, reg *Registry) {
 
 	// Tool 3: get_operation_detail — service + operationId (both required)
 	detailTool := mcp.NewTool("get_operation_detail",
-		mcp.WithDescription("Get full parameter schemas, request body schema, and response schema for an operation. Use this to understand how to call an operation before calling it."),
+		mcp.WithDescription("Get full parameter schemas, request body schema, and response schema for an operation. Also returns confirmationRequired indicating whether you must pass confirmed=true when calling this operation. Use this to understand how to call an operation before calling it."),
 		mcp.WithString("service",
 			mcp.Required(),
 			mcp.Description("Service name"),

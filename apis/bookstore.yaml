@@ -1,0 +1,264 @@
+openapi: "3.0.3"
+info:
+  title: Bookstore
+  description: A bookstore API for testing portier locally. Includes an RFC 6902 JSON Patch endpoint.
+  version: "1.0.0"
+servers:
+  - url: https://bookstore.example.com/v1
+paths:
+  /books:
+    get:
+      operationId: listBooks
+      summary: List all books
+      tags: [books]
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+        - name: genre
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A list of books
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Book"
+    post:
+      operationId: createBook
+      summary: Create a book
+      tags: [books]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewBook"
+      responses:
+        "201":
+          description: The created book
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+  /books/{bookId}:
+    get:
+      operationId: getBookById
+      summary: Get a book by ID
+      tags: [books]
+      parameters:
+        - name: bookId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A single book
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+    put:
+      operationId: replaceBook
+      summary: Replace a book (full update)
+      tags: [books]
+      parameters:
+        - name: bookId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewBook"
+      responses:
+        "200":
+          description: The replaced book
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+    patch:
+      operationId: patchBook
+      summary: Partially update a book using RFC 6902 JSON Patch
+      tags: [books]
+      parameters:
+        - name: bookId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json-patch+json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/JsonPatchOperation"
+            example:
+              - op: replace
+                path: /price
+                value: 14.99
+              - op: add
+                path: /genre
+                value: fiction
+      responses:
+        "200":
+          description: The patched book
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+    delete:
+      operationId: deleteBook
+      summary: Delete a book
+      tags: [books]
+      parameters:
+        - name: bookId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Book deleted
+  /books/{bookId}/reviews:
+    get:
+      operationId: listReviews
+      summary: List reviews for a book
+      tags: [reviews]
+      parameters:
+        - name: bookId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A list of reviews
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Review"
+    post:
+      operationId: createReview
+      summary: Add a review for a book
+      tags: [reviews]
+      parameters:
+        - name: bookId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewReview"
+      responses:
+        "201":
+          description: The created review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Review"
+components:
+  schemas:
+    Book:
+      type: object
+      required: [id, title, author]
+      properties:
+        id:
+          type: string
+          readOnly: true
+        title:
+          type: string
+        author:
+          type: string
+        genre:
+          type: string
+          nullable: true
+        price:
+          type: number
+          format: float
+        isbn:
+          type: string
+          nullable: true
+    NewBook:
+      type: object
+      required: [title, author]
+      properties:
+        title:
+          type: string
+        author:
+          type: string
+        genre:
+          type: string
+        price:
+          type: number
+          format: float
+        isbn:
+          type: string
+    JsonPatchOperation:
+      type: object
+      required: [op, path]
+      properties:
+        op:
+          type: string
+          enum: [add, remove, replace, move, copy, test]
+          description: The operation to perform per RFC 6902
+        path:
+          type: string
+          description: JSON Pointer (RFC 6901) identifying the target location
+        value:
+          description: The value to add, replace, or test (required for add/replace/test)
+        from:
+          type: string
+          description: JSON Pointer identifying the source location (required for move/copy)
+    Review:
+      type: object
+      required: [id, bookId, rating, body]
+      properties:
+        id:
+          type: string
+          readOnly: true
+        bookId:
+          type: string
+          readOnly: true
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        body:
+          type: string
+        reviewer:
+          type: string
+          nullable: true
+    NewReview:
+      type: object
+      required: [rating, body]
+      properties:
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        body:
+          type: string
+        reviewer:
+          type: string

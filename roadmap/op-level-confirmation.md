@@ -1,0 +1,1 @@
+The require confirmation configuration should be extended to operation-level.
