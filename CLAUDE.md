@@ -26,6 +26,8 @@ go.mod / go.sum      # module: github.com/philippslang/portier
 
 ## Build & Run
 
+This project uses trunk-based development. Do not create feature branches.
+
 ```bash
 # Build the CLI binary
 go build -o portier ./cmd/portier
