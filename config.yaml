@@ -15,3 +15,5 @@ services:
   - name: pets
     spec: ./apis/pets.yaml
     require_confirmation: false  # optional: override the server default for this service
+  - name: bookstore
+    spec: ./apis/bookstore.yaml

@@ -1,0 +1,1 @@
+If no open telemetry server is set, logging to stderr should be used.

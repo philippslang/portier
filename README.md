@@ -169,3 +169,7 @@ Use `transport: "http"` (the default). Deploy as a sidecar or standalone pod and
 | `github.com/getkin/kin-openapi` | OpenAPI spec parsing |
 | `gopkg.in/yaml.v3` | Config parsing |
 | `go.opentelemetry.io/...` | Distributed tracing |
+
+## Testing
+
+[MCP Inspector](https://github.com/MCPJam/inspector)

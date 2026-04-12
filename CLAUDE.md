@@ -108,6 +108,7 @@ Optional distributed tracing via OTLP gRPC. Configured under `server.telemetry` 
 ## Active Technologies
 - Go 1.23 (module `github.com/philippslang/portier`) + `github.com/mark3labs/mcp-go`, `github.com/getkin/kin-openapi/openapi3`, `go.opentelemetry.io/otel` (001-service-level-confirmation)
 - N/A — in-memory registry only (001-service-level-confirmation)
+- Go 1.23 + `github.com/mark3labs/mcp-go`, `github.com/getkin/kin-openapi/openapi3` (already in `go.mod`); `net/http/httptest` (stdlib — no new dependency) (003-integration-test-mcp)
 
 ## Recent Changes
 - 001-service-level-confirmation: Added Go 1.23 (module `github.com/philippslang/portier`) + `github.com/mark3labs/mcp-go`, `github.com/getkin/kin-openapi/openapi3`, `go.opentelemetry.io/otel`
