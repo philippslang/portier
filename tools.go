@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
@@ -29,7 +30,49 @@ func RegisterTools(s *mcpserver.MCPServer, reg *Registry) {
 		return toJSONResult(reg.ListServices())
 	}))
 
-	// Tool 2: list_operations — service (required), tag (optional)
+	// Tool 2: search_operations — grep-like discovery across services
+	searchTool := mcp.NewTool("search_operations",
+		mcp.WithDescription("Search operations across all registered API services by a case-insensitive substring. Matches the operation's path, summary, and description. Returns a compact list of matches — service name, operationId, method, path, summary, and whether calling it will require confirmation — so you can jump straight to get_operation_detail without listing every service. Optionally filter to a subset of services. Discovery only: this tool does not call any upstream API."),
+		mcp.WithString("query",
+			mcp.Required(),
+			mcp.Description("Case-insensitive substring to match against operation path, summary, and description. Required and must be non-empty."),
+		),
+		mcp.WithArray("services",
+			mcp.Description("Optional list of service names to scope the search. When omitted or empty, all registered services are searched. Unknown names are reported in the response's unknownServices field rather than causing an error."),
+			mcp.WithStringItems(),
+		),
+	)
+	s.AddTool(searchTool, withTracing("search_operations", func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		args := request.GetArguments()
+		query, _ := args["query"].(string)
+		if strings.TrimSpace(query) == "" {
+			return mcp.NewToolResultError("query is required"), nil
+		}
+
+		var servicesFilter []string
+		if raw, ok := args["services"].([]any); ok {
+			servicesFilter = make([]string, 0, len(raw))
+			for _, v := range raw {
+				if s, ok := v.(string); ok {
+					servicesFilter = append(servicesFilter, s)
+				}
+			}
+		}
+
+		span := trace.SpanFromContext(ctx)
+		span.SetAttributes(
+			attribute.Int("mcp.query_length", len(query)),
+			attribute.Int("mcp.services_filter_count", len(servicesFilter)),
+		)
+
+		result, err := reg.SearchOperations(query, servicesFilter)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return toJSONResult(result)
+	}))
+
+	// Tool 3: list_operations — service (required), tag (optional)
 	listOpsTool := mcp.NewTool("list_operations",
 		mcp.WithDescription("List operations available in a service. Returns operationId, summary, confirmationRequired flag (true when the operation requires confirmed=true to execute), and tags. Optionally filter by tag."),
 		mcp.WithString("service",

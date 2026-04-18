@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Portier is a Go MCP (Model Context Protocol) API gateway. It reads OpenAPI specs at startup and exposes them as four MCP tools so LLM agents can progressively discover and call REST APIs.
+Portier is a Go MCP (Model Context Protocol) API gateway. It reads OpenAPI specs at startup and exposes them as five MCP tools so LLM agents can progressively discover and call REST APIs.
 
 The module path is `github.com/philippslang/portier`.
 
@@ -13,10 +13,10 @@ The module path is `github.com/philippslang/portier`.
 ```
 doc.go               # package portier — package-level doc comment
 config.go            # Config types and LoadConfig
-registry.go          # Registry, LoadSpec, and the 4 tool handler methods
+registry.go          # Registry, LoadSpec, and the tool handler methods
 schema.go            # flattenSchema* — OpenAPI → LLM-readable maps
 telemetry.go         # OTel tracer init and withTracing middleware
-tools.go             # RegisterTools — wires the 4 tools to the MCP server
+tools.go             # RegisterTools — wires the 5 tools to the MCP server
 server.go            # Server, NewServer, NewServerFromFile, Run
 util.go              # isMutating, containsTag, filterIgnoredHeaders, truncateResponse
 cmd/portier/main.go  # package main — CLI entrypoint
@@ -67,12 +67,13 @@ srv.Run(ctx)
 
 ## Architecture
 
-### The Four MCP Tools (progressive discovery pattern)
+### The Five MCP Tools (progressive discovery pattern)
 
 1. **`list_services`** — returns service names, descriptions, tags
-2. **`list_operations(service, tag?)`** — lists operations in a service; optional tag filter
-3. **`get_operation_detail(service, operationId)`** — full parameter/request/response schemas
-4. **`call_operation(service, operationId, params, confirmed)`** — executes the HTTP call
+2. **`search_operations(query, services?)`** — case-insensitive substring search over operation path/summary/description across all (or filtered) services; returns compact matches capped at 20
+3. **`list_operations(service, tag?)`** — lists operations in a service; optional tag filter
+4. **`get_operation_detail(service, operationId)`** — full parameter/request/response schemas
+5. **`call_operation(service, operationId, params, confirmed)`** — executes the HTTP call
 
 ### Write Gate
 
@@ -103,12 +104,14 @@ Static headers support `${ENV_VAR}` substitution at load time.
 
 ### OpenTelemetry
 
-Optional distributed tracing via OTLP gRPC. Configured under `server.telemetry` in `config.yaml`. All four MCP tool handlers and outbound HTTP calls are instrumented with spans.
+Optional distributed tracing via OTLP gRPC. Configured under `server.telemetry` in `config.yaml`. All five MCP tool handlers and outbound HTTP calls are instrumented with spans.
 
 ## Active Technologies
 - Go 1.23 (module `github.com/philippslang/portier`) + `github.com/mark3labs/mcp-go`, `github.com/getkin/kin-openapi/openapi3`, `go.opentelemetry.io/otel` (001-service-level-confirmation)
 - N/A — in-memory registry only (001-service-level-confirmation)
 - Go 1.23 + `github.com/mark3labs/mcp-go`, `github.com/getkin/kin-openapi/openapi3` (already in `go.mod`); `net/http/httptest` (stdlib — no new dependency) (003-integration-test-mcp)
+- Go 1.25 (module `github.com/philippslang/portier`, toolchain pinned via `go.mod`) + `github.com/mark3labs/mcp-go` (MCP server + tool registration), `github.com/getkin/kin-openapi/openapi3` (already-parsed operations on `*Operation`), `go.opentelemetry.io/otel` (span instrumentation via existing `withTracing` middleware) (004-search-operations)
+- N/A — in-memory `Registry` only; no new persistence (004-search-operations)
 
 ## Recent Changes
 - 001-service-level-confirmation: Added Go 1.23 (module `github.com/philippslang/portier`) + `github.com/mark3labs/mcp-go`, `github.com/getkin/kin-openapi/openapi3`, `go.opentelemetry.io/otel`

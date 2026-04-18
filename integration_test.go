@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -451,4 +453,287 @@ func TestGetOperationDetail(t *testing.T) {
 			t.Errorf("confirmationRequired = %v, want false", detail["confirmationRequired"])
 		}
 	})
+}
+
+// searchResultIDs extracts (service, operationId) pairs from a SearchOperations
+// response, preserving order. Used to keep assertions readable across cases.
+func searchResultIDs(t *testing.T, resp map[string]any) [][2]string {
+	t.Helper()
+	raw, ok := resp["results"].([]map[string]any)
+	if !ok {
+		t.Fatalf("results key missing or wrong type: %T", resp["results"])
+	}
+	ids := make([][2]string, 0, len(raw))
+	for _, r := range raw {
+		ids = append(ids, [2]string{r["service"].(string), r["operationId"].(string)})
+	}
+	return ids
+}
+
+// TestSearchOperations verifies substring search against the bundled specs:
+// cross-service matching, case insensitivity, zero-match, empty-query, the
+// optional services filter (US2), and duplicate / unknown filter entries.
+func TestSearchOperations(t *testing.T) {
+	stub, _ := newStub(t)
+	defer stub.Close()
+	reg := newTestRegistry(t, stub)
+
+	type searchCase struct {
+		name              string
+		query             string
+		services          []string
+		wantServices      []string // distinct service names expected in results (sorted, deduped)
+		wantContainsOpIDs []string // operationIds that MUST appear in results (order-agnostic)
+		wantEmpty         bool
+		wantError         bool
+		wantUnknown       []string
+	}
+
+	cases := []searchCase{
+		{
+			name:              "pet matches only pets service",
+			query:             "pet",
+			wantServices:      []string{"pets"},
+			wantContainsOpIDs: []string{"listPets", "createPet", "getPetById", "updatePet", "deletePet"},
+		},
+		{
+			name:              "book matches only bookstore service",
+			query:             "book",
+			wantServices:      []string{"bookstore"},
+			wantContainsOpIDs: []string{"listBooks", "createBook", "getBookById", "replaceBook", "patchBook", "deleteBook"},
+		},
+		{
+			name:              "list matches across both services via summary",
+			query:             "list",
+			wantServices:      []string{"bookstore", "pets"},
+			wantContainsOpIDs: []string{"listPets", "listBooks", "listReviews"},
+		},
+		{
+			name:              "case insensitive PET equivalent to pet",
+			query:             "PET",
+			wantServices:      []string{"pets"},
+			wantContainsOpIDs: []string{"listPets"},
+		},
+		{
+			name:      "no match returns empty results",
+			query:     "xyzzy-no-match",
+			wantEmpty: true,
+		},
+		{
+			name:      "empty query errors",
+			query:     "",
+			wantError: true,
+		},
+		{
+			name:      "whitespace query errors",
+			query:     "   ",
+			wantError: true,
+		},
+		{
+			name:              "services filter scopes to bookstore only",
+			query:             "e",
+			services:          []string{"bookstore"},
+			wantServices:      []string{"bookstore"},
+			wantContainsOpIDs: []string{"createBook"},
+		},
+		{
+			name:         "services filter scopes pet query to bookstore only (no matches)",
+			query:        "pet",
+			services:     []string{"bookstore"},
+			wantEmpty:    true,
+			wantServices: nil,
+		},
+		{
+			name:              "unknown service name reported in unknownServices",
+			query:             "book",
+			services:          []string{"bookstore", "does-not-exist"},
+			wantServices:      []string{"bookstore"},
+			wantContainsOpIDs: []string{"listBooks"},
+			wantUnknown:       []string{"does-not-exist"},
+		},
+		{
+			name:              "duplicate service names in filter do not duplicate results",
+			query:             "book",
+			services:          []string{"bookstore", "bookstore"},
+			wantServices:      []string{"bookstore"},
+			wantContainsOpIDs: []string{"listBooks"},
+		},
+		{
+			name:              "empty services slice behaves like no filter",
+			query:             "pet",
+			services:          []string{},
+			wantServices:      []string{"pets"},
+			wantContainsOpIDs: []string{"listPets"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := reg.SearchOperations(tc.query, tc.services)
+			if tc.wantError {
+				if err == nil {
+					t.Fatalf("expected error for empty query, got nil (resp=%v)", resp)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("SearchOperations: %v", err)
+			}
+			ids := searchResultIDs(t, resp)
+
+			if tc.wantEmpty {
+				if len(ids) != 0 {
+					t.Errorf("expected empty results, got %v", ids)
+				}
+			}
+
+			// wantContainsOpIDs: every listed ID must be present.
+			gotOpIDs := map[string]bool{}
+			for _, pair := range ids {
+				gotOpIDs[pair[1]] = true
+			}
+			for _, id := range tc.wantContainsOpIDs {
+				if !gotOpIDs[id] {
+					t.Errorf("expected operationId %q in results, got %v", id, ids)
+				}
+			}
+
+			// wantServices: the distinct service set must match exactly (after sort).
+			if tc.wantServices != nil {
+				got := map[string]bool{}
+				for _, pair := range ids {
+					got[pair[0]] = true
+				}
+				gotSlice := make([]string, 0, len(got))
+				for s := range got {
+					gotSlice = append(gotSlice, s)
+				}
+				sort.Strings(gotSlice)
+				want := append([]string(nil), tc.wantServices...)
+				sort.Strings(want)
+				if !reflect.DeepEqual(gotSlice, want) {
+					t.Errorf("distinct services = %v, want %v", gotSlice, want)
+				}
+			}
+
+			// Unknown services.
+			if tc.wantUnknown != nil {
+				got, _ := resp["unknownServices"].([]string)
+				want := append([]string(nil), tc.wantUnknown...)
+				sort.Strings(want)
+				gotSorted := append([]string(nil), got...)
+				sort.Strings(gotSorted)
+				if !reflect.DeepEqual(gotSorted, want) {
+					t.Errorf("unknownServices = %v, want %v", gotSorted, want)
+				}
+			} else {
+				if _, present := resp["unknownServices"]; present {
+					t.Errorf("unknownServices should be omitted when empty, got %v", resp["unknownServices"])
+				}
+			}
+
+			// truncated must be false for any case with fewer than 20 matches
+			// (every bundled-spec case above is < 20).
+			if tr, _ := resp["truncated"].(bool); tr {
+				t.Errorf("truncated = true, want false for small bundled specs (results=%v)", ids)
+			}
+		})
+	}
+}
+
+// TestSearchOperationsTruncation verifies the 20-result cap on a synthetic spec
+// with 25 matching operations. Uses a real temp YAML file through LoadSpec —
+// no mocking (Constitution II).
+func TestSearchOperationsTruncation(t *testing.T) {
+	dir := t.TempDir()
+	specPath := filepath.Join(dir, "widgets.yaml")
+
+	var b strings.Builder
+	b.WriteString(`openapi: "3.0.3"
+info:
+  title: Widgets
+  version: "1.0.0"
+servers:
+  - url: http://example.com
+paths:
+`)
+	for i := 0; i < 25; i++ {
+		fmt.Fprintf(&b, "  /widget%d:\n    get:\n      operationId: getWidget%d\n      summary: Widget endpoint %d\n      responses:\n        \"200\":\n          description: ok\n", i, i, i)
+	}
+	if err := os.WriteFile(specPath, []byte(b.String()), 0o644); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+
+	reg := NewRegistry(nil)
+	if err := reg.LoadSpec(ServiceConfig{Name: "widgets", SpecPath: specPath, Host: "http://example.com"}); err != nil {
+		t.Fatalf("LoadSpec: %v", err)
+	}
+
+	resp, err := reg.SearchOperations("widget", nil)
+	if err != nil {
+		t.Fatalf("SearchOperations: %v", err)
+	}
+	ids := searchResultIDs(t, resp)
+	if len(ids) != 20 {
+		t.Errorf("len(results) = %d, want 20 (truncation cap)", len(ids))
+	}
+	if tr, _ := resp["truncated"].(bool); !tr {
+		t.Errorf("truncated = false, want true when cap is reached")
+	}
+}
+
+// TestSearchOperationsVisibility verifies that operations hidden by
+// allow_operations do not appear in search results — mirroring list_operations.
+func TestSearchOperationsVisibility(t *testing.T) {
+	stub, _ := newStub(t)
+	defer stub.Close()
+
+	// Configure pets with an allow list that excludes deletePet and updatePet.
+	trueVal := true
+	reg := NewRegistry(stub.Client())
+	if err := reg.LoadSpec(ServiceConfig{
+		Name:                "pets",
+		SpecPath:            "apis/pets.yaml",
+		Host:                stub.URL,
+		RequireConfirmation: &trueVal,
+		AllowOperations:     []string{"listPets", "getPetById", "createPet"},
+	}); err != nil {
+		t.Fatalf("LoadSpec: %v", err)
+	}
+
+	// deletePet and updatePet both match "pet" via path/summary but are excluded.
+	resp, err := reg.SearchOperations("pet", nil)
+	if err != nil {
+		t.Fatalf("SearchOperations: %v", err)
+	}
+	ids := searchResultIDs(t, resp)
+	gotOpIDs := map[string]bool{}
+	for _, pair := range ids {
+		gotOpIDs[pair[1]] = true
+	}
+	for _, hidden := range []string{"deletePet", "updatePet"} {
+		if gotOpIDs[hidden] {
+			t.Errorf("%s was hidden by allow_operations but appeared in search results", hidden)
+		}
+	}
+	for _, visible := range []string{"listPets", "getPetById", "createPet"} {
+		if !gotOpIDs[visible] {
+			t.Errorf("%s should be visible but was missing from search results: %v", visible, ids)
+		}
+	}
+
+	// Parity: list_operations must agree about which ops are visible.
+	listed, err := reg.ListOperations("pets", "")
+	if err != nil {
+		t.Fatalf("ListOperations: %v", err)
+	}
+	listedIDs := map[string]bool{}
+	for _, op := range listed {
+		listedIDs[op["operationId"].(string)] = true
+	}
+	for id := range gotOpIDs {
+		if !listedIDs[id] {
+			t.Errorf("search surfaced %s but list_operations did not — parity violated", id)
+		}
+	}
 }

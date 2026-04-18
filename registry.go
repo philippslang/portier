@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 
@@ -15,8 +16,11 @@ import (
 
 // Operation is a single parsed OpenAPI operation.
 type Operation struct {
-	OperationID string                   `json:"operationId"`
-	Summary     string                   `json:"summary"`
+	OperationID string `json:"operationId"`
+	Summary     string `json:"summary"`
+	// Description is the OpenAPI operation description, captured at load time
+	// so search_operations can match against it without re-parsing the spec.
+	Description string                   `json:"-"`
 	Method      string                   `json:"method"`
 	Path        string                   `json:"path"`
 	Tags        []string                 `json:"tags"`
@@ -115,6 +119,7 @@ func (r *Registry) LoadSpec(cfg ServiceConfig) error {
 			svc.Operations[op.OperationID] = &Operation{
 				OperationID: op.OperationID,
 				Summary:     op.Summary,
+				Description: op.Description,
 				Method:      strings.ToUpper(method),
 				Path:        path,
 				Tags:        op.Tags,
@@ -318,6 +323,96 @@ func (r *Registry) GetOperationDetail(serviceName, operationID string) (map[stri
 	}
 
 	return detail, nil
+}
+
+// SearchOperations performs a case-insensitive substring search across
+// every registered operation's path, summary, and description. Pass an empty
+// services slice to search all registered services; pass a non-empty slice
+// to scope the search — unknown names in the filter are collected into the
+// response's unknownServices field rather than causing an error.
+//
+// Results are capped at 20 entries; when the cap is reached the response's
+// truncated field is true and the agent should refine its query. The
+// unknownServices key is only present when at least one supplied filter name
+// was unrecognised.
+func (r *Registry) SearchOperations(query string, services []string) (map[string]any, error) {
+	needle := strings.ToLower(strings.TrimSpace(query))
+	if needle == "" {
+		return nil, fmt.Errorf("query is required")
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var unknownServices []string
+	var scope map[string]bool
+	if len(services) > 0 {
+		seen := make(map[string]bool, len(services))
+		scope = make(map[string]bool, len(services))
+		for _, name := range services {
+			if seen[name] {
+				continue
+			}
+			seen[name] = true
+			if _, ok := r.services[name]; ok {
+				scope[name] = true
+			} else {
+				unknownServices = append(unknownServices, name)
+			}
+		}
+	}
+
+	serviceNames := make([]string, 0, len(r.services))
+	for name := range r.services {
+		if scope != nil && !scope[name] {
+			continue
+		}
+		serviceNames = append(serviceNames, name)
+	}
+	sort.Strings(serviceNames)
+
+	const resultCap = 20
+	results := make([]map[string]any, 0, resultCap)
+	truncated := false
+
+outer:
+	for _, name := range serviceNames {
+		svc := r.services[name]
+		opIDs := make([]string, 0, len(svc.Operations))
+		for id := range svc.Operations {
+			opIDs = append(opIDs, id)
+		}
+		sort.Strings(opIDs)
+		for _, id := range opIDs {
+			op := svc.Operations[id]
+			if !strings.Contains(strings.ToLower(op.Path), needle) &&
+				!strings.Contains(strings.ToLower(op.Summary), needle) &&
+				!strings.Contains(strings.ToLower(op.Description), needle) {
+				continue
+			}
+			results = append(results, map[string]any{
+				"service":              svc.Name,
+				"operationId":          op.OperationID,
+				"method":               op.Method,
+				"path":                 op.Path,
+				"summary":              op.Summary,
+				"confirmationRequired": svc.RequireConfirmation && isMutating(op.Method),
+			})
+			if len(results) >= resultCap {
+				truncated = true
+				break outer
+			}
+		}
+	}
+
+	resp := map[string]any{
+		"results":   results,
+		"truncated": truncated,
+	}
+	if len(unknownServices) > 0 {
+		resp["unknownServices"] = unknownServices
+	}
+	return resp, nil
 }
 
 // CallOperation executes an API call. Mutating methods (POST/PUT/PATCH/DELETE)

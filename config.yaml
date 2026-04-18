@@ -14,6 +14,8 @@ services:
   # Host and base path are read from the spec's servers block.
   - name: pets
     spec: ./apis/pets.yaml
+    host: http://localhost:9000  # optional: override the host from the spec
     require_confirmation: false  # optional: override the server default for this service
   - name: bookstore
     spec: ./apis/bookstore.yaml
+    host: http://localhost:9000  # optional: override the host from the spec
